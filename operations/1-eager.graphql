@@ -1,0 +1,6 @@
+query Eager {
+  productBySlug(slug: "table") {
+    id
+    name
+  }
+}

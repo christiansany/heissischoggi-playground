@@ -1,0 +1,8 @@
+query ByIdDeferName {
+  productById(id: 1) {
+    id
+    ... @defer(label: "A") {
+      name
+    }
+  }
+}

@@ -1,0 +1,10 @@
+
+---
+Content-Type: application/json; charset=utf-8
+
+{"data":{"productById":{"id":1}},"extensions":{"fusion":{"operationPlan":{"version":"1.4.0","id":"ffa9dbf0c5f3e90bb8e2aa42eaafbb7d2458dc0b8dca2cb58dac67deb8c5f8e1","operation":{"name":"ByIdDeferName","kind":"Query","document":"query ByIdDeferName { productById(id: 1) { id id @fusion__requirement } }","id":"eea33d0cb174711a4b6a045eace682fd","hash":"9550e797ae74140cf7f0695ea5301e2d","shortHash":"9550e797"},"searchSpace":1,"expandedNodes":1,"nodes":[{"id":1,"type":"Operation","schema":"catalog","operation":{"name":"ByIdDeferName_9550e797_1","kind":"Query","document":"query ByIdDeferName_9550e797_1 { productById(id: 1) { id } }","hash":"266cd45782d1b990e38fc933100f6f9513f3b016552dbb1ffb23a6b9693e58b6","shortHash":"266cd457","xxHash":16055845940937475184},"resultSelectionSet":"{ productById }"}],"deliveryGroups":[{"id":0,"path":"$.productById","label":"A"}],"incrementalPlans":[{"deliveryGroupIds":[0],"parentNodeId":1,"requirements":[{"name":"__fusion_1_id","type":"Int!","path":"$.productById","selectionMap":"id"}],"operation":{"name":"ByIdDeferName","kind":"Query","document":"query ByIdDeferName { productById(id: 1) { name id @fusion__requirement } }","id":"eea33d0cb174711a4b6a045eace682fd#defer_0","hash":"9550e797ae74140cf7f0695ea5301e2d#defer_0","shortHash":"9550e797"},"nodes":[{"id":1,"type":"Operation","schema":"catalog","operation":{"name":"ByIdDeferName_defer_1","kind":"Query","document":"query ByIdDeferName_defer_1($__fusion_1_id: Int!) { productById(id: $__fusion_1_id) { name } }","hash":"6729006d965caf3b704a5b1b42d510f5b1d15e442fb477beaca034d17e76cb9e","shortHash":"6729006d","xxHash":10406220486241774267},"lookupTypeName":"Product","resultSelectionSet":"{ name }","source":"$.productById","target":"$.productById","requirements":[{"name":"__fusion_1_id","type":"Int!","path":"$.productById","selectionMap":"id"}],"dependencies":[{"parentNodeId":1}]}]}]}}},"pending":[{"id":"0","path":["productById"],"label":"A"}],"hasNext":true}
+---
+Content-Type: application/json; charset=utf-8
+
+{"incremental":[{"id":"0","data":{"name":"Table"}}],"completed":[{"id":"0"}],"hasNext":false}
+-----

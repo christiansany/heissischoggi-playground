@@ -1,0 +1,8 @@
+query SlugDeferRating {
+  productBySlug(slug: "table") {
+    id
+    ... @defer(label: "A") {
+      rating
+    }
+  }
+}

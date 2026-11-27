@@ -1,0 +1,13 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <!-- Override with: HC_VERSION=16.8.0-p.25 ./scripts/repro.sh -->
+    <HotChocolateVersion Condition="'$(HotChocolateVersion)' == ''">16.7.7</HotChocolateVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="HotChocolate.AspNetCore" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="HotChocolate.AspNetCore.CommandLine" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="HotChocolate.Types.Analyzers" Version="$(HotChocolateVersion)" />
+    <PackageVersion Include="HotChocolate.Fusion.AspNetCore" Version="$(HotChocolateVersion)" />
+  </ItemGroup>
+</Project>

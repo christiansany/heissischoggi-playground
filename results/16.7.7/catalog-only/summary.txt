@@ -1,0 +1,7 @@
+HotChocolate 16.7.7, composition: catalog-only
+operation                  http  result
+1-eager                    200   ok, single response
+2-slug-defer-name          200   ok, 2 parts (deferred)
+3-slug-defer-name-rating   200   ERROR: The field `rating` does not exist on the type `Product`.
+4-slug-defer-rating        200   ERROR: The field `rating` does not exist on the type `Product`.
+5-byid-defer-name          200   ok, 2 parts (deferred)
