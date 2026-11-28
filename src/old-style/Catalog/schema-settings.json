@@ -1,0 +1,17 @@
+{
+  "name": "catalog",
+  "transports": {
+    "http": {
+      "url": "http://localhost:5101/graphql",
+      "capabilities": {
+        "batching": {
+          "variableBatching": true,
+          "requestBatching": false,
+          "aliasBatching": true
+        },
+        "onError": "propagate"
+      }
+    }
+  },
+  "version": "1.0.0"
+}

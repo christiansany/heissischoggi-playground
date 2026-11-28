@@ -1,12 +1,7 @@
 # Fusion: `@defer` fails with "No plan was found for the @defer fragment"
 
 Minimal reproduction for a Hot Chocolate Fusion query-planner bug.
-
-A deferred fragment cannot be planned when
-
-- the parent field (`Query.productBySlug`) is served by **one** subgraph (`catalog`),
-- every deferred field (`Product.name`) is served by that **same** subgraph, and
-- a **second** subgraph (`reviews`) also has a lookup for the type (`Product`).
+Tested with the Hot Chocolate packages 16.7.7 and 16.8.0-p.25 (target framework .NET 10); the composition is always done by the Nitro CLI 16.7.7.
 
 ```graphql
 query SlugDeferName {
@@ -19,403 +14,151 @@ query SlugDeferName {
 }
 ```
 
+The response is HTTP 200 with the error `Unexpected Execution Error`. Its `extensions.exception` (the gateway runs with `IncludeExceptionDetails`) is:
+
 ```
 No plan was found for the @defer fragment at path '$.productBySlug'.
    at HotChocolate.Fusion.Planning.OperationPlanner.PlanIncrementalPlan(String operationId, IncrementalPlanDescriptor descriptor, Int32 incrementalPlanId, PlanningBudget budget, CancellationToken cancellationToken)
    at HotChocolate.Fusion.Planning.OperationPlanner.RouteIncrementalPlans(String id, DeferSplitResult splitResult, PlanContextGraph contextGraph, PlanningBudget budget, CancellationToken cancellationToken)
    at HotChocolate.Fusion.Planning.OperationPlanner.CreatePlan(String id, String hash, String shortHash, OperationDefinitionNode operationDefinition, CancellationToken cancellationToken)
    at HotChocolate.Fusion.Execution.Pipeline.OperationPlanMiddleware.PlanOperation(RequestContext context, OperationDocumentInfo operationDocumentInfo, OperationDefinitionNode operation)
-   at HotChocolate.Fusion.Execution.Pipeline.OperationPlanMiddleware.InvokeAsync(RequestContext context, RequestDelegate next)
+   ... (6 more frames, see results/16.7.7/new-style/catalog+reviews/2-slug-defer-name.response.txt)
 ```
 
-Reproduced on **16.7.7** and **16.8.0-p.25** (.NET 10).
+In this repro the operation fails when all of this is true:
 
-## Setup
+- the parent field (`Query.productBySlug`) is served by one subgraph only (`catalog`),
+- every deferred field (`Product.name`) is served by that same subgraph,
+- a second subgraph (`reviews`) also contributes to the type (`Product`).
 
-| Project | Port | Schema |
+The same operation works when only `catalog` is composed.
+
+## Two styles, same bug
+
+The repo contains the subgraphs in two styles. Both show the bug.
+
+| | [new-style](src/new-style) | [old-style](src/old-style) |
 |---|---|---|
-| [src/Catalog](src/Catalog/Types.cs) | 5101 | [schema.graphqls](src/Catalog/schema.graphqls) |
-| [src/Reviews](src/Reviews/Types.cs) | 5102 | [schema.graphqls](src/Reviews/schema.graphqls) |
-| [src/Gateway](src/Gateway/Program.cs) | 5100 | [gateway.graphqls](src/Gateway/gateway.graphqls) (composed), `gateway.far` |
+| Subgraphs | `catalog`, `reviews` | `catalog`, `reviews`, `assistance` |
+| Entity resolution | `[Lookup]` on `productById` | `[NodeResolver]` / `Node` interface, no composition attributes |
+| Source schema | `@lookup`, `@key`, `@shareable` | no composition directives |
+| `schema-settings.json` | as exported | as exported, plus `"version": "1.0.0"`: the composition then infers the lookups and keys |
+| Composition | default | `--enable-global-object-identification` |
+| `productById` served by | `catalog`, `reviews` | `catalog`, `assistance` |
+| `reviews` reaches `Product` by | `productById(id:)` | `node(id:)` only |
+| `id` type | `Int!` | `ID!` |
+
+In both styles `scripts/compose.sh` rewrites the port in the exported `schema-settings.json`.
+
+Source schemas as exported by `schema export`, shortened: `schema { ... }`, scalar and directive definitions, descriptions and `@cost` are left out.
 
 ```graphql
-# catalog
-type Query {
-  productById(id: Int!): Product @lookup @shareable
-  productBySlug(slug: String!): Product
+# new-style catalog                                # new-style reviews
+type Query {                                       type Query {
+  productById(id: Int!): Product                     productById(id: Int!): Product
+    @shareable @lookup                                 @shareable @lookup
+  productBySlug(slug: String!): Product            }
 }
-type Product @key(fields: "id") {
-  id: Int!
-  slug: String!
-  name: String!
-  description: String!
-}
-
-# reviews
-type Query {
-  productById(id: Int!): Product @lookup @shareable
-}
-type Product @key(fields: "id") {
-  id: Int!
-  rating: Float!
+type Product @key(fields: "id") {                  type Product @key(fields: "id") {
+  id: Int!                                           rating: Float!
+  name: String!                                      id: Int!
+  description: String!                             }
 }
 ```
+
+```graphql
+# old-style catalog                                # old-style reviews
+type Query {                                       type Query {
+  node(id: ID!): Node                                node(id: ID!): Node
+  nodes(ids: [ID!]!): [Node]!                        nodes(ids: [ID!]!): [Node]!
+  productById(id: ID!): Product                    }
+  productBySlug(slug: String!): Product
+}
+type Product implements Node {                     type Product implements Node {
+  id: ID!                                            rating: Float!
+  name: String!                                      id: ID!
+  description: String!                             }
+}
+interface Node { id: ID! }                         interface Node { id: ID! }
+
+# old-style assistance
+type Query {
+  node(id: ID!): Node
+  nodes(ids: [ID!]!): [Node]!
+  productById(id: ID!): Product
+}
+type Product implements Node {
+  id: ID!
+}
+interface Node { id: ID! }
+```
+
+Full files: `src/<style>/<Subgraph>/schema.graphqls`. Composed schema per run: `results/<version>/<style>/<composition>/gateway.graphqls`.
 
 ## Run it
 
-Needs the .NET 10 SDK, `jq` and `curl`.
+Builds against `net10.0`. Needs a .NET SDK that can build that (10 or newer), `jq`, `curl` and `unzip`.
 
 ```sh
-./scripts/repro.sh                        # 16.7.7
-HC_VERSION=16.8.0-p.25 ./scripts/repro.sh # any other version
+./scripts/repro.sh                        # Hot Chocolate 16.7.7
+HC_VERSION=16.8.0-p.25 ./scripts/repro.sh # other package version
 ```
 
-The script builds everything, exports the subgraph schemas, composes the gateway
-with the Nitro CLI, starts all three services and sends every file in
-[operations/](operations) to the gateway with the `Fusion-Operation-Plan: 1` header.
-It does this for two compositions:
+For each style the script builds the projects, exports the subgraph schemas, composes the
+gateway with the Nitro CLI, starts the services (gateway 5100, catalog 5101, reviews 5102, assistance 5103) and sends
+every file in `operations/<style>/` to the gateway with the `Fusion-Operation-Plan: 1` header.
+It does that for these compositions:
 
-- `catalog+reviews`: the bug
-- `catalog-only`: control, same services, `reviews` left out of the composition
+- `catalog-only`: control
+- `catalog+reviews`: shows the bug
+- `catalog+reviews+assistance`: old-style only
 
-Output goes to `results/<version>/<composition>/`:
-`summary.txt`, `<operation>.response.txt` (raw response) and `<operation>.plan.json` (operation plan).
+Output in `results/<version>/`:
 
-To poke at it by hand, start the three projects
-(`dotnet run --no-launch-profile --urls http://localhost:<port>` in each `src/*` folder)
-and open http://localhost:5100/graphql.
+- `REPORT.md`: every operation with its result per composition, and the operation plan (JSON) wherever the gateway produced one
+- `<style>/<composition>/summary.txt`, `<operation>.response.txt` (raw response), `<operation>.plan.json` (raw plan)
 
-## Results (16.7.7, identical on 16.8.0-p.25)
+## Results
 
-| # | Operation | Deferred fields | `catalog+reviews` | `catalog-only` |
+Outcomes and plans are the same with 16.7.7 and 16.8.0-p.25; only the plan format `version` field differs (`1.2.0` / `1.4.0`).
+Full reports: [16.7.7](results/16.7.7/REPORT.md), [16.8.0-p.25](results/16.8.0-p.25/REPORT.md).
+
+- **deferred**: answered in two parts
+- **n/a**: the operation selects `rating`, which does not exist without `reviews` (validation error)
+
+### new-style
+
+| # | Operation | `catalog-only` | `catalog+reviews` |
+|---|---|---|---|
+| 1 | [`productBySlug { id name }`](operations/new-style/1-eager.graphql) | ok | ok |
+| 2 | [`productBySlug { id ... @defer { name } }`](operations/new-style/2-slug-defer-name.graphql) | deferred | **No plan was found** |
+| 3 | [`productBySlug { id ... @defer { name rating } }`](operations/new-style/3-slug-defer-name-rating.graphql) | n/a | deferred |
+| 4 | [`productBySlug { id ... @defer { rating } }`](operations/new-style/4-slug-defer-rating.graphql) | n/a | deferred |
+| 5 | [`productById(id:) { id ... @defer { name } }`](operations/new-style/5-byid-defer-name.graphql) | deferred | deferred |
+
+### old-style
+
+| # | Operation | `catalog-only` | `catalog+reviews` | `catalog+reviews+assistance` |
 |---|---|---|---|---|
-| 1 | [1-eager](operations/1-eager.graphql) | none | ok | ok |
-| 2 | [2-slug-defer-name](operations/2-slug-defer-name.graphql) | `name` (catalog) | **No plan was found** | ok |
-| 3 | [3-slug-defer-name-rating](operations/3-slug-defer-name-rating.graphql) | `name` (catalog), `rating` (reviews) | ok | n/a |
-| 4 | [4-slug-defer-rating](operations/4-slug-defer-rating.graphql) | `rating` (reviews) | ok | n/a |
-| 5 | [5-byid-defer-name](operations/5-byid-defer-name.graphql) | `name` (catalog), parent `productById` is in both subgraphs | ok | ok |
+| 1 | [`productBySlug { id name }`](operations/old-style/1-eager.graphql) | ok | ok | ok |
+| 2 | [`productBySlug { id ... @defer { name } }`](operations/old-style/2-slug-defer-name.graphql) | deferred | **No plan was found** | **No plan was found** |
+| 3 | [`productBySlug { id ... @defer { name rating } }`](operations/old-style/3-slug-defer-name-rating.graphql) | n/a | deferred | deferred |
+| 4 | [`productBySlug { id ... @defer { rating } }`](operations/old-style/4-slug-defer-rating.graphql) | n/a | deferred | deferred |
+| 5 | [`productById(id:) { id ... @defer { name } }`](operations/old-style/5-byid-defer-name.graphql) | deferred | **No plan was found** | deferred |
+| 6 | [`node(id:) { ... on Product { id ... @defer { name } } }`](operations/old-style/6-node-defer-name.graphql) | deferred | deferred | deferred |
 
-- Summaries: [catalog+reviews](results/16.7.7/catalog+reviews/summary.txt), [catalog-only](results/16.7.7/catalog-only/summary.txt)
-- The error is thrown while planning, before any subgraph is called.
-- Operation 2 only breaks once `reviews` is part of the composition, although `reviews` serves nothing the query asks for.
+What the tables show:
 
-## Operation plans
-
-Hashes removed for readability; the raw plans are in `results/`.
-Operation 2 has no plan in `catalog+reviews`, since planning is the step that fails.
-
-### Operation 2 in `catalog-only` (works): the plan that is expected
-
-The deferred part is one lookup into `catalog` (`productById(id:)`), keyed by the `id` of the initial result.
-
-```json
-{
-  "version": "1.2.0",
-  "operation": {
-    "name": "SlugDeferName",
-    "kind": "Query",
-    "document": "query SlugDeferName { productBySlug(slug: \"table\") { id id @fusion__requirement } }",
-    "id": "817d579aa18b4ab66632b56574cd018a"
-  },
-  "searchSpace": 1,
-  "expandedNodes": 1,
-  "nodes": [
-    {
-      "id": 1,
-      "type": "Operation",
-      "schema": "catalog",
-      "operation": {
-        "name": "SlugDeferName_5fab490a_1",
-        "kind": "Query",
-        "document": "query SlugDeferName_5fab490a_1 { productBySlug(slug: \"table\") { id } }"
-      },
-      "resultSelectionSet": "{ productBySlug }"
-    }
-  ],
-  "deliveryGroups": [
-    {
-      "id": 0,
-      "path": "$.productBySlug",
-      "label": "A"
-    }
-  ],
-  "incrementalPlans": [
-    {
-      "deliveryGroupIds": [
-        0
-      ],
-      "parentNodeId": 1,
-      "requirements": [
-        {
-          "name": "__fusion_1_id",
-          "type": "Int!",
-          "path": "$.productBySlug",
-          "selectionMap": "id"
-        }
-      ],
-      "operation": {
-        "name": "SlugDeferName",
-        "kind": "Query",
-        "document": "query SlugDeferName { productBySlug(slug: \"table\") { name id @fusion__requirement } }",
-        "id": "817d579aa18b4ab66632b56574cd018a#defer_0"
-      },
-      "nodes": [
-        {
-          "id": 1,
-          "type": "Operation",
-          "schema": "catalog",
-          "operation": {
-            "name": "SlugDeferName_defer_1",
-            "kind": "Query",
-            "document": "query SlugDeferName_defer_1($__fusion_1_id: Int!) { productById(id: $__fusion_1_id) { name } }"
-          },
-          "lookupTypeName": "Product",
-          "resultSelectionSet": "{ name }",
-          "source": "$.productById",
-          "target": "$.productBySlug",
-          "requirements": [
-            {
-              "name": "__fusion_1_id",
-              "type": "Int!",
-              "path": "$.productBySlug",
-              "selectionMap": "id"
-            }
-          ],
-          "dependencies": [
-            {
-              "parentNodeId": 1
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Operation 3 in `catalog+reviews` (works)
-
-Contains the very same `catalog` lookup step for `name`. The planner finds it as soon as the fragment also selects a `reviews` field.
-
-```json
-{
-  "version": "1.2.0",
-  "operation": {
-    "name": "SlugDeferNameRating",
-    "kind": "Query",
-    "document": "query SlugDeferNameRating { productBySlug(slug: \"table\") { id id @fusion__requirement } }",
-    "id": "4d3b4ba5d7774e66c413fecddc4197aa"
-  },
-  "searchSpace": 1,
-  "expandedNodes": 1,
-  "nodes": [
-    {
-      "id": 1,
-      "type": "Operation",
-      "schema": "catalog",
-      "operation": {
-        "name": "SlugDeferNameRating_83e86e53_1",
-        "kind": "Query",
-        "document": "query SlugDeferNameRating_83e86e53_1 { productBySlug(slug: \"table\") { id } }"
-      },
-      "resultSelectionSet": "{ productBySlug }"
-    }
-  ],
-  "deliveryGroups": [
-    {
-      "id": 0,
-      "path": "$.productBySlug",
-      "label": "A"
-    }
-  ],
-  "incrementalPlans": [
-    {
-      "deliveryGroupIds": [
-        0
-      ],
-      "parentNodeId": 1,
-      "requirements": [
-        {
-          "name": "__fusion_1_id",
-          "type": "Int!",
-          "path": "$.productBySlug",
-          "selectionMap": "id"
-        },
-        {
-          "name": "__fusion_2_id",
-          "type": "Int!",
-          "path": "$.productBySlug",
-          "selectionMap": "id"
-        }
-      ],
-      "operation": {
-        "name": "SlugDeferNameRating",
-        "kind": "Query",
-        "document": "query SlugDeferNameRating { productBySlug(slug: \"table\") { name rating id @fusion__requirement } }",
-        "id": "4d3b4ba5d7774e66c413fecddc4197aa#defer_0"
-      },
-      "nodes": [
-        {
-          "id": 1,
-          "type": "Operation",
-          "schema": "reviews",
-          "operation": {
-            "name": "SlugDeferNameRating_defer_1",
-            "kind": "Query",
-            "document": "query SlugDeferNameRating_defer_1($__fusion_1_id: Int!) { productById(id: $__fusion_1_id) { rating } }"
-          },
-          "lookupTypeName": "Product",
-          "resultSelectionSet": "{ rating }",
-          "source": "$.productById",
-          "target": "$.productBySlug",
-          "requirements": [
-            {
-              "name": "__fusion_1_id",
-              "type": "Int!",
-              "path": "$.productBySlug",
-              "selectionMap": "id"
-            }
-          ],
-          "dependencies": [
-            {
-              "parentNodeId": 1
-            }
-          ]
-        },
-        {
-          "id": 2,
-          "type": "Operation",
-          "schema": "catalog",
-          "operation": {
-            "name": "SlugDeferNameRating_defer_2",
-            "kind": "Query",
-            "document": "query SlugDeferNameRating_defer_2($__fusion_2_id: Int!) { productById(id: $__fusion_2_id) { name } }"
-          },
-          "lookupTypeName": "Product",
-          "resultSelectionSet": "{ name }",
-          "source": "$.productById",
-          "target": "$.productBySlug",
-          "requirements": [
-            {
-              "name": "__fusion_2_id",
-              "type": "Int!",
-              "path": "$.productBySlug",
-              "selectionMap": "id"
-            }
-          ],
-          "dependencies": [
-            {
-              "parentNodeId": 1
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
-
-### Operation 5 in `catalog+reviews` (works)
-
-```json
-{
-  "version": "1.2.0",
-  "operation": {
-    "name": "ByIdDeferName",
-    "kind": "Query",
-    "document": "query ByIdDeferName { productById(id: 1) { id } }",
-    "id": "eea33d0cb174711a4b6a045eace682fd"
-  },
-  "searchSpace": 2,
-  "expandedNodes": 2,
-  "nodes": [
-    {
-      "id": 1,
-      "type": "Operation",
-      "schema": "catalog",
-      "operation": {
-        "name": "ByIdDeferName_9550e797_1",
-        "kind": "Query",
-        "document": "query ByIdDeferName_9550e797_1 { productById(id: 1) { id } }"
-      },
-      "resultSelectionSet": "{ productById }"
-    },
-    {
-      "id": 2,
-      "type": "Operation",
-      "schema": "reviews",
-      "operation": {
-        "name": "ByIdDeferName_defer_2",
-        "kind": "Query",
-        "document": "query ByIdDeferName_defer_2 { productById(id: 1) { id } }"
-      },
-      "resultSelectionSet": "{ productById }"
-    }
-  ],
-  "deliveryGroups": [
-    {
-      "id": 0,
-      "path": "$.productById",
-      "label": "A"
-    }
-  ],
-  "incrementalPlans": [
-    {
-      "deliveryGroupIds": [
-        0
-      ],
-      "parentNodeId": 1,
-      "requirements": [
-        {
-          "name": "__fusion_1_id",
-          "type": "Int!",
-          "path": "$.productById",
-          "selectionMap": "id"
-        }
-      ],
-      "operation": {
-        "name": "ByIdDeferName",
-        "kind": "Query",
-        "document": "query ByIdDeferName { productById(id: 1) { name id @fusion__requirement } }",
-        "id": "eea33d0cb174711a4b6a045eace682fd#defer_0"
-      },
-      "nodes": [
-        {
-          "id": 1,
-          "type": "Operation",
-          "schema": "catalog",
-          "operation": {
-            "name": "ByIdDeferName_defer_1",
-            "kind": "Query",
-            "document": "query ByIdDeferName_defer_1($__fusion_1_id: Int!) { productById(id: $__fusion_1_id) { name } }"
-          },
-          "lookupTypeName": "Product",
-          "resultSelectionSet": "{ name }",
-          "source": "$.productById",
-          "target": "$.productById",
-          "requirements": [
-            {
-              "name": "__fusion_1_id",
-              "type": "Int!",
-              "path": "$.productById",
-              "selectionMap": "id"
-            }
-          ],
-          "dependencies": [
-            {
-              "parentNodeId": 2
-            }
-          ]
-        }
-      ]
-    }
-  ]
-}
-```
+- Operation 2 fails in both styles as soon as a second subgraph is composed.
+- Operation 5 fails only where `productById` is served by `catalog` alone while another subgraph contributes to `Product` (old-style `catalog+reviews`). Where a second subgraph serves `productById` it works.
+- Operation 3 works. Its plan fetches `name` with a deferred lookup step in `catalog` (`productById(id:) { name }`), keyed by the `id` of the initial step. Operation 2 would need exactly such a step.
+- The error is thrown while planning, so the failing operations have no operation plan.
+- Side observation: in the new-style `catalog+reviews` plan of operation 5, the initial part has a second step in `reviews` (`productById(id: 1) { id }`), and the deferred `catalog` step depends on that one. The `catalog-only` plan has no such step.
 
 ## Expected
 
-Operation 2 is planned in `catalog+reviews` exactly like in `catalog-only`:
-initial step `productBySlug { id }` in `catalog`, deferred step `productById(id:) { name }` in `catalog`.
+Operation 2 is planned with further subgraphs composed the same way it is planned in `catalog-only`:
+an initial step in `catalog`, then one deferred lookup step in `catalog` that fetches `name` by the product's `id`
+(`productById(id:)` in new-style, `node(id:)` in old-style). Those plans are in `REPORT.md` under `catalog-only`.
 
 The issue text for the Hot Chocolate repository is in [ISSUE.md](ISSUE.md).

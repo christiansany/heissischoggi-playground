@@ -1,0 +1,10 @@
+query NodeDeferName {
+  node(id: "UHJvZHVjdDox") {
+    ... on Product {
+      id
+      ... @defer(label: "A") {
+        name
+      }
+    }
+  }
+}

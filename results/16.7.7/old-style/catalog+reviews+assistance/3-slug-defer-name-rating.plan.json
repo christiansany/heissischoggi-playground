@@ -1,0 +1,129 @@
+{
+  "version": "1.2.0",
+  "id": "d68a3ba3c2bdf11606c13b57fab2d08e8b831b172220292d002ec439a48801ec",
+  "operation": {
+    "name": "SlugDeferNameRating",
+    "kind": "Query",
+    "document": "query SlugDeferNameRating { productBySlug(slug: \"table\") { id id @fusion__requirement } }",
+    "id": "4d3b4ba5d7774e66c413fecddc4197aa",
+    "hash": "83e86e53a62e3519fafb47d007ca6ae7",
+    "shortHash": "83e86e53"
+  },
+  "searchSpace": 1,
+  "expandedNodes": 1,
+  "nodes": [
+    {
+      "id": 1,
+      "type": "Operation",
+      "schema": "catalog",
+      "operation": {
+        "name": "SlugDeferNameRating_83e86e53_1",
+        "kind": "Query",
+        "document": "query SlugDeferNameRating_83e86e53_1 { productBySlug(slug: \"table\") { id } }",
+        "hash": "266988abce69bc18930410d9051ea3e849110ce1a6da4eaa0e5c948099659e59",
+        "shortHash": "266988ab",
+        "xxHash": 17918889629565071971
+      },
+      "resultSelectionSet": "{ productBySlug }"
+    }
+  ],
+  "deliveryGroups": [
+    {
+      "id": 0,
+      "path": "$.productBySlug",
+      "label": "A"
+    }
+  ],
+  "incrementalPlans": [
+    {
+      "deliveryGroupIds": [
+        0
+      ],
+      "parentNodeId": 1,
+      "requirements": [
+        {
+          "name": "__fusion_1_id",
+          "type": "ID!",
+          "path": "$.productBySlug",
+          "selectionMap": "id"
+        },
+        {
+          "name": "__fusion_2_id",
+          "type": "ID!",
+          "path": "$.productBySlug",
+          "selectionMap": "id"
+        }
+      ],
+      "operation": {
+        "name": "SlugDeferNameRating",
+        "kind": "Query",
+        "document": "query SlugDeferNameRating { productBySlug(slug: \"table\") { name rating id @fusion__requirement } }",
+        "id": "4d3b4ba5d7774e66c413fecddc4197aa#defer_0",
+        "hash": "83e86e53a62e3519fafb47d007ca6ae7#defer_0",
+        "shortHash": "83e86e53"
+      },
+      "nodes": [
+        {
+          "id": 1,
+          "type": "Operation",
+          "schema": "reviews",
+          "operation": {
+            "name": "SlugDeferNameRating_defer_1",
+            "kind": "Query",
+            "document": "query SlugDeferNameRating_defer_1($__fusion_1_id: ID!) { node(id: $__fusion_1_id) { __typename ... on Product { rating id } } }",
+            "hash": "b4ecc80d5d54e46fde41025ed094124f0b09aefeff67113e64585b1f05f4b0c2",
+            "shortHash": "b4ecc80d",
+            "xxHash": 12899960896184967116
+          },
+          "lookupTypeName": "Product",
+          "resultSelectionSet": "{ rating id }",
+          "source": "$.node<Product>",
+          "target": "$.productBySlug",
+          "requirements": [
+            {
+              "name": "__fusion_1_id",
+              "type": "ID!",
+              "path": "$.productBySlug",
+              "selectionMap": "id"
+            }
+          ],
+          "dependencies": [
+            {
+              "parentNodeId": 1
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "Operation",
+          "schema": "catalog",
+          "operation": {
+            "name": "SlugDeferNameRating_defer_2",
+            "kind": "Query",
+            "document": "query SlugDeferNameRating_defer_2($__fusion_2_id: ID!) { productById(id: $__fusion_2_id) { name } }",
+            "hash": "a3a66c417944a162df926d7aa805f90c73754d204483b81d8280794247b5a381",
+            "shortHash": "a3a66c41",
+            "xxHash": 13226793856473377231
+          },
+          "lookupTypeName": "Product",
+          "resultSelectionSet": "{ name }",
+          "source": "$.productById",
+          "target": "$.productBySlug",
+          "requirements": [
+            {
+              "name": "__fusion_2_id",
+              "type": "ID!",
+              "path": "$.productBySlug",
+              "selectionMap": "id"
+            }
+          ],
+          "dependencies": [
+            {
+              "parentNodeId": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

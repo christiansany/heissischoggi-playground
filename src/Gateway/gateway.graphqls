@@ -6,21 +6,67 @@ schema
   query: Query
 }
 
-type Query @fusion__type(schema: CATALOG) @fusion__type(schema: REVIEWS) {
+type Query
+  @fusion__type(schema: ASSISTANCE)
+  @fusion__type(schema: CATALOG)
+  @fusion__type(schema: REVIEWS) {
+  node(id: ID!): Node @fusion__gateway_field
   productById(
-    id: Int! @fusion__inputField(schema: CATALOG) @fusion__inputField(schema: REVIEWS)
-  ): Product @fusion__field(schema: CATALOG) @fusion__field(schema: REVIEWS)
+    id: ID! @fusion__inputField(schema: ASSISTANCE) @fusion__inputField(schema: CATALOG)
+  ): Product @fusion__field(schema: ASSISTANCE) @fusion__field(schema: CATALOG)
   productBySlug(slug: String! @fusion__inputField(schema: CATALOG)): Product
     @fusion__field(schema: CATALOG)
 }
 
-type Product
+type Product implements Node
+  @fusion__type(schema: ASSISTANCE)
   @fusion__type(schema: CATALOG)
   @fusion__type(schema: REVIEWS)
+  @fusion__implements(schema: ASSISTANCE, interface: "Node")
+  @fusion__implements(schema: CATALOG, interface: "Node")
+  @fusion__implements(schema: REVIEWS, interface: "Node")
+  @fusion__lookup(
+    schema: ASSISTANCE
+    key: "id"
+    field: "productById(id: ID!): Product"
+    map: ["id"]
+    path: null
+    internal: false
+  )
   @fusion__lookup(
     schema: CATALOG
     key: "id"
-    field: "productById(id: Int!): Product"
+    field: "productById(id: ID!): Product"
+    map: ["id"]
+    path: null
+    internal: false
+  ) {
+  description: String! @fusion__field(schema: CATALOG)
+  id: ID!
+    @fusion__field(schema: ASSISTANCE)
+    @fusion__field(schema: CATALOG)
+    @fusion__field(schema: REVIEWS)
+  name: String! @fusion__field(schema: CATALOG)
+  rating: Float! @fusion__field(schema: REVIEWS)
+}
+
+"The node interface is implemented by entities that have a global unique identifier."
+interface Node
+  @fusion__type(schema: ASSISTANCE)
+  @fusion__type(schema: CATALOG)
+  @fusion__type(schema: REVIEWS)
+  @fusion__lookup(
+    schema: ASSISTANCE
+    key: "id"
+    field: "node(id: ID!): Node"
+    map: ["id"]
+    path: null
+    internal: false
+  )
+  @fusion__lookup(
+    schema: CATALOG
+    key: "id"
+    field: "node(id: ID!): Node"
     map: ["id"]
     path: null
     internal: false
@@ -28,16 +74,15 @@ type Product
   @fusion__lookup(
     schema: REVIEWS
     key: "id"
-    field: "productById(id: Int!): Product"
+    field: "node(id: ID!): Node"
     map: ["id"]
     path: null
     internal: false
   ) {
-  description: String! @fusion__field(schema: CATALOG)
-  id: Int! @fusion__field(schema: CATALOG) @fusion__field(schema: REVIEWS)
-  name: String! @fusion__field(schema: CATALOG)
-  rating: Float! @fusion__field(schema: REVIEWS)
-  slug: String! @fusion__field(schema: CATALOG)
+  id: ID!
+    @fusion__field(schema: ASSISTANCE)
+    @fusion__field(schema: CATALOG)
+    @fusion__field(schema: REVIEWS)
 }
 
 enum fusion__NodeResolution {
@@ -47,6 +92,7 @@ enum fusion__NodeResolution {
 
 "The fusion__Schema enum is a generated type used within an execution schema document to refer to a source schema in a type-safe manner."
 enum fusion__Schema {
+  ASSISTANCE @fusion__schema_metadata(name: "assistance")
   CATALOG @fusion__schema_metadata(name: "catalog")
   REVIEWS @fusion__schema_metadata(name: "reviews")
 }

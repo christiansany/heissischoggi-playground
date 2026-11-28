@@ -1,0 +1,1 @@
+{"errors":[{"message":"The field `rating` does not exist on the type `Product`.","locations":[{"line":5,"column":7}],"extensions":{"type":"Product","field":"rating","responseName":"rating","specifiedBy":"https://spec.graphql.org/September2025/#sec-Field-Selections"}}]}

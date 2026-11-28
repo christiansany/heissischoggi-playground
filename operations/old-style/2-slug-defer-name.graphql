@@ -1,0 +1,8 @@
+query SlugDeferName {
+  productBySlug(slug: "table") {
+    id
+    ... @defer(label: "A") {
+      name
+    }
+  }
+}

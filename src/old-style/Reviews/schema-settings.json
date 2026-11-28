@@ -1,0 +1,17 @@
+{
+  "name": "reviews",
+  "transports": {
+    "http": {
+      "url": "http://localhost:5102/graphql",
+      "capabilities": {
+        "batching": {
+          "variableBatching": true,
+          "requestBatching": false,
+          "aliasBatching": true
+        },
+        "onError": "propagate"
+      }
+    }
+  },
+  "version": "1.0.0"
+}
